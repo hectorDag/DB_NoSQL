@@ -1,15 +1,78 @@
-const registerUser = (req, res) => {
-    res.json({message: 'Crear Usuario'})
-}
+const jwt = require('jsonwebtoken')
+const bycrypt = require('bcryptjs')
+const mongoose = require('mongoose')
+const asyncHandler = require('express-async-handler')
+const User = require('../models/usersModel')
 
-const loginUser = (req, res) => {
-    res.json({message: 'Login Usuario'})
-}
+const registerUser = asyncHandler( async (req, res) => {
+    const {name, email, password} = req.body
+    if(!name || !email || !password) {
+        res.status(400)
+        throw new Error ('Por favor llena todos los espacios ')
+    }
+
+    //Verificacion de existencia del usuario 
+    const userExists = await User.findOne({email})
+    if(userExists) {
+        res.status(400)
+        throw new Error ('Usuario ya registrado')
+    }
+
+    //se realiza el hash al password
+    const salt = await bycrypt.genSalt(10)
+    const hashedPasword = await bycrypt.hash(password, salt)
+
+    //se crea a usuario en la base de datos 
+
+    const user = await User.create({
+        name, 
+        email, 
+        password: hashedPasword
+    })
+
+    if(user) {
+        res.status(201).json({
+            _id: user._id,
+            name: user.name,
+            email: user.email
+        })
+    }else {
+        res.status(400)
+        throw new Error ('No se pudo crear el ususario')
+    }
+})
+
+const loginUser = asyncHandler( async (req, res) => {
+    const {email, password} = req.body
+    
+    //generamos el jwt
+
+    const generateToken = (id) => {
+        return jwt.sign({id},process.env.JWT_SECRET, {
+            expiresIn: '3m'
+        })
+    }
+
+    //verificar email y password
+
+    const user = await User.findOne({email})
+    if(user && (await bycrypt.compare(password, user.password))){
+        res.json({
+            _id: user._id,
+            name: user.name,
+            email: user.email,
+            token: generateToken(user._id)
+        })
+    }else{
+        res.status(400)
+        throw new Error ('Credenciales incorrectas')
+    }
+})
 
 
-const getUserData = (req, res) => {
-    res.json({message: 'Datos Usuario'})
-}
+const getUserData = asyncHandler( async (req, res) => {
+    res.json(req.user)
+})
 
 module.exports = {
     registerUser,
